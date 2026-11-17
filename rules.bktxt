@@ -1,0 +1,133 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    /* ================= CLIENT TOKEN ================= */
+    "client_token": {
+      ".read": false,
+      ".write": "newData.child('token').isString() &&
+                 newData.child('lastUpdated').isNumber()"
+    },
+
+    /* ================= SERVER STATUS HANDSHAKE ================= */
+    "server_status": {
+      ".read": "root.child('instant_tokens')
+                    .child(root.child('client_token').child('token').val())
+                    .exists() &&
+                root.child('instant_tokens')
+                    .child(root.child('client_token').child('token').val())
+                    .child('expiresAt')
+                    .val() > now",
+
+      ".write": false,
+
+      "serverListeningRequest": {
+        ".read": "auth != null",
+        ".write": "newData.hasChildren(['askedAt']) &&
+                   newData.child('askedAt').isNumber()",
+        ".validate": "newData.hasChildren(['askedAt'])"
+      },
+
+      "serverListeningResponse": {
+        ".read": true,
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['isListening','respondedAt']) &&
+                      newData.child('isListening').isBoolean() &&
+                      newData.child('respondedAt').isNumber()"
+      }
+    },
+
+    /* ================= QR SCANS ================= */
+    "instant_scans": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+
+      "$scanId": {
+        ".read": "data.exists() &&
+                  root.child('instant_tokens')
+                      .child(data.child('token').val())
+                      .exists() &&
+                  root.child('instant_tokens')
+                      .child(data.child('token').val())
+                      .child('expiresAt')
+                      .val() > now",
+
+        ".write": "auth != null || (
+                    auth == null &&
+                    newData.child('token').exists() &&
+                    root.child('instant_tokens')
+                        .child(newData.child('token').val())
+                        .exists() &&
+                    root.child('instant_tokens')
+                        .child(newData.child('token').val())
+                        .child('expiresAt')
+                        .val() > now
+                  )",
+
+        ".validate": "newData.hasChildren(['qr','createdAt','token']) &&
+                      newData.child('qr').isString() &&
+                      newData.child('qr').val().length > 0 &&
+                      newData.child('qr').val().length < 200 &&
+                      newData.child('createdAt').isNumber() &&
+                      newData.child('token').isString()"
+      }
+    },
+
+    /* ================= PRINT COMMANDS ================= */
+    "instant_commands": {
+      ".read": "auth != null",
+
+      ".write": "auth != null || (
+                  auth == null &&
+                  newData.child('token').exists() &&
+                  root.child('instant_tokens')
+                      .child(newData.child('token').val())
+                      .exists() &&
+                  root.child('instant_tokens')
+                      .child(newData.child('token').val())
+                      .child('expiresAt')
+                      .val() > now
+                )",
+
+      "$commandId": {
+        ".read": "data.exists() &&
+                  root.child('instant_tokens')
+                      .child(data.child('token').val())
+                      .exists() &&
+                  root.child('instant_tokens')
+                      .child(data.child('token').val())
+                      .child('expiresAt')
+                      .val() > now",
+
+        ".write": "auth != null || (
+                    auth == null &&
+                    newData.child('token').exists() &&
+                    root.child('instant_tokens')
+                        .child(newData.child('token').val())
+                        .exists() &&
+                    root.child('instant_tokens')
+                        .child(newData.child('token').val())
+                        .child('expiresAt')
+                        .val() > now
+                  )",
+
+        ".validate": "newData.hasChildren(['type','createdAt','token']) &&
+                      newData.child('type').val() == 'print' &&
+                      newData.child('createdAt').isNumber() &&
+                      newData.child('token').isString()"
+      }
+    },
+
+    /* ================= TOKENS ================= */
+    "instant_tokens": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+
+      "$tokenId": {
+        ".validate": "newData.hasChildren(['expiresAt']) &&
+                      newData.child('expiresAt').isNumber()"
+      }
+    }
+  }
+}
