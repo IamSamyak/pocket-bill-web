@@ -24,6 +24,15 @@ import { generateBillPdf } from '../../services/billPdfService'
 import type { HistoryBill } from '../../services/billHistoryService'
 import type { Category } from '../../services/catalogService'
 import type { PrintRequestStatus } from '../../services/printRequestService'
+import { Document, Page, pdfjs } from 'react-pdf'
+
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString()
 
 interface BillHistoryScreenProps {
   categories: Category[]
@@ -381,11 +390,10 @@ export default function BillHistoryScreen({
                   <button
                     key={bill.receiptId}
                     onClick={() => openBill(bill)}
-                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                      index !== bills.length - 1
-                        ? 'border-b border-slate-100'
-                        : ''
-                    }`}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${index !== bills.length - 1
+                      ? 'border-b border-slate-100'
+                      : ''
+                      }`}
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
                       {(
@@ -417,11 +425,10 @@ export default function BillHistoryScreen({
                       </p>
 
                       <span
-                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          bill.paid
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-rose-50 text-rose-700'
-                        }`}
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${bill.paid
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-rose-50 text-rose-700'
+                          }`}
                       >
                         {bill.paid ? 'Paid' : 'Unpaid'}
                       </span>
@@ -454,6 +461,23 @@ function BillPreview({
 }) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [pdfError, setPdfError] = useState('')
+
+  const pdfContainerRef = useRef<HTMLDivElement>(null)
+  const [pdfWidth, setPdfWidth] = useState(0)
+
+  useEffect(() => {
+    const container = pdfContainerRef.current
+
+    if (!container) return
+
+    const observer = new ResizeObserver(([entry]) => {
+      setPdfWidth(Math.floor(entry.contentRect.width))
+    })
+
+    observer.observe(container)
+
+    return () => observer.disconnect()
+  }, [pdfUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -583,13 +607,34 @@ function BillPreview({
           />
         </div>
 
-        {pdfUrl ? (
-          <iframe
-            key={pdfUrl}
-            src={pdfUrl}
-            title={`Receipt ${bill.receiptId}`}
-            className="h-[70vh] min-h-[450px] w-full bg-slate-100"
-          />
+        {pdfUrl && !pdfError ? (
+          <div
+            ref={pdfContainerRef}
+            className="flex min-h-[300px] justify-center overflow-x-auto bg-slate-100 p-2 sm:p-4"
+          >
+            <Document
+              key={pdfUrl}
+              file={pdfUrl}
+              loading={
+                <div className="flex min-h-[300px] items-center justify-center">
+                  <p className="text-sm text-slate-500">
+                    Loading PDF...
+                  </p>
+                </div>
+              }
+              onLoadError={(err) => {
+                console.error('Failed to render bill PDF:', err)
+                setPdfError('Unable to display the receipt PDF.')
+              }}
+            >
+              <Page
+                pageNumber={1}
+                width={pdfWidth > 0 ? pdfWidth : 320}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+              />
+            </Document>
+          </div>
         ) : pdfError ? (
           <div className="flex min-h-[300px] flex-col items-center justify-center px-6 py-12 text-center">
             <AlertCircle
