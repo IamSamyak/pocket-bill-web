@@ -24,6 +24,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
   const runningRef = useRef(false)
   const lastScanAtRef = useRef(0)
   const onScanRef = useRef(onScan)
+  const scanAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const [cameras, setCameras] = useState<CameraDevice[]>([])
   const [activeCameraIndex, setActiveCameraIndex] = useState(0)
@@ -35,6 +36,37 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
   useEffect(() => {
     onScanRef.current = onScan
   }, [onScan])
+
+  // Initialize the scanner confirmation sound.
+  useEffect(() => {
+    const audio = new Audio(
+      `${import.meta.env.BASE_URL}audio/scanner-beep.mp3`,
+    )
+
+    audio.preload = 'auto'
+    audio.volume = 0.8
+
+    scanAudioRef.current = audio
+
+    return () => {
+      audio.pause()
+      audio.currentTime = 0
+      scanAudioRef.current = null
+    }
+  }, [])
+
+  async function playScanBeep() {
+    const audio = scanAudioRef.current
+
+    if (!audio) return
+
+    try {
+      audio.currentTime = 0
+      await audio.play()
+    } catch (err) {
+      console.warn('Unable to play scanner beep:', err)
+    }
+  }
 
   async function startCamera(
     scanner: Html5Qrcode,
@@ -54,6 +86,10 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
         if (now - lastScanAtRef.current < 1500) return
 
         lastScanAtRef.current = now
+
+        // Play confirmation sound for every accepted scan.
+        void playScanBeep()
+
         onScanRef.current(decodedText)
       },
       () => {
