@@ -1,18 +1,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft,
   Plus,
   QrCode,
   X,
   CreditCard,
   Banknote,
   Smartphone,
-  Menu,
-  Settings,
-  History,
-  LogOut,
-  UserRound,
 } from 'lucide-react'
 
 import {
@@ -40,8 +34,9 @@ import {
   type PrintRequestStatus,
 } from './services/printRequestService'
 
-import CategoryImageManager from './components/settings/CategoryImageManager'
-import BillHistoryScreen from './components/history/BillHistoryScreen'
+import AppMenu from './components/navigation/AppMenu'
+import PageRenderer from './components/navigation/PageRenderer'
+import type { PageId } from './components/navigation/navigationConfig'
 
 import QrScanner from './components/bill/QrScanner'
 import CategorySelector from './components/bill/CategorySelector'
@@ -98,10 +93,7 @@ function App() {
   const [showQrScanner, setShowQrScanner] = useState(false)
 
   // App navigation
-  const [showSettings, setShowSettings] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const [showAccount, setShowAccount] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
+  const [activePage, setActivePage] = useState<PageId>('billing')
 
   // Authentication
   const [currentUser, setCurrentUser] = useState<User | null>(
@@ -216,31 +208,12 @@ function App() {
 
   // ---------------- NAVIGATION ----------------
 
-  function openSettings() {
-    setShowMenu(false)
-    setShowHistory(false)
-    setShowAccount(false)
-    setShowSettings(true)
-  }
-
-  function openHistory() {
-    setShowMenu(false)
-    setShowSettings(false)
-    setShowAccount(false)
-    setShowHistory(true)
-  }
-
-  function openAccount() {
-    setShowMenu(false)
-    setShowSettings(false)
-    setShowHistory(false)
-    setShowAccount(true)
+  function handleNavigate(page: PageId) {
+    setActivePage(page)
   }
 
   function backToBilling() {
-    setShowSettings(false)
-    setShowHistory(false)
-    setShowAccount(false)
+    setActivePage('billing')
   }
 
   async function handleLogout() {
@@ -524,9 +497,9 @@ function App() {
         return current.map((item) =>
           item.id === itemId
             ? {
-              ...item,
-              quantity: item.quantity + values.quantity,
-            }
+                ...item,
+                quantity: item.quantity + values.quantity,
+              }
             : item,
         )
       }
@@ -752,107 +725,26 @@ function App() {
     setShowCategoryPicker(false)
     setShowItemSheet(false)
     setShowQrScanner(false)
-    setShowMenu(false)
+
+    // Always return to the billing page for a new bill.
+    setActivePage('billing')
   }
 
-  // ---------------- HISTORY SCREEN ----------------
+  // ---------------- PAGE RENDERING ----------------
 
-  if (showHistory) {
+  if (activePage !== 'billing') {
     return (
       <>
-        <BillHistoryScreen
-          categories={categories}
+        <PageRenderer
+          activePage={activePage}
           onBack={backToBilling}
+          categories={categories}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          isLoggingOut={isLoggingOut}
         />
         {renderNotice()}
       </>
-    )
-  }
-
-  // ---------------- ACCOUNT SCREEN ----------------
-
-  if (showAccount) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4">
-          <div className="mx-auto flex max-w-xl items-center gap-3">
-            <button
-              onClick={backToBilling}
-              className="rounded-xl bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200"
-              aria-label="Back to billing"
-            >
-              <ArrowLeft size={19} />
-            </button>
-
-            <h1 className="text-lg font-bold text-slate-900">
-              Account
-            </h1>
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-xl px-4 py-8">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                <UserRound size={30} />
-              </div>
-
-              <h2 className="mt-4 text-lg font-bold text-slate-900">
-                {currentUser?.displayName || 'Pocket Bill User'}
-              </h2>
-
-              <p className="mt-1 break-all text-sm text-slate-500">
-                {currentUser?.email || 'No email available'}
-              </p>
-            </div>
-
-            <div className="my-6 border-t border-slate-100" />
-
-            <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <LogOut size={18} />
-              {isLoggingOut ? 'Signing out...' : 'Sign out'}
-            </button>
-          </section>
-        </main>
-
-        {renderNotice()}
-      </div>
-    )
-  }
-
-  // ---------------- SETTINGS SCREEN ----------------
-
-  if (showSettings) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4">
-          <div className="mx-auto flex max-w-4xl items-center gap-3">
-            <button
-              onClick={backToBilling}
-              className="rounded-xl bg-slate-100 p-2 text-slate-600 hover:bg-slate-200"
-              aria-label="Back to billing"
-            >
-              <ArrowLeft size={19} />
-            </button>
-
-            <h1 className="text-lg font-bold text-slate-900">
-              Settings
-            </h1>
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-            <CategoryImageManager />
-          </section>
-        </main>
-
-        {renderNotice()}
-      </div>
     )
   }
 
@@ -889,54 +781,8 @@ function App() {
             </p>
           </div>
 
-          {/* Hamburger menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu((value) => !value)}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100"
-              aria-label="Open menu"
-              aria-expanded={showMenu}
-            >
-              <Menu size={22} />
-            </button>
-
-            {showMenu && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Close menu"
-                  className="fixed inset-0 z-30 cursor-default"
-                  onClick={() => setShowMenu(false)}
-                />
-
-                <div className="absolute right-0 top-14 z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                  <button
-                    onClick={openSettings}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <Settings size={18} className="text-slate-500" />
-                    Settings
-                  </button>
-
-                  <button
-                    onClick={openHistory}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <History size={18} className="text-slate-500" />
-                    Today's History
-                  </button>
-
-                  <button
-                    onClick={openAccount}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <UserRound size={18} className="text-slate-500" />
-                    Account
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Configuration-driven navigation menu */}
+          <AppMenu onNavigate={handleNavigate} />
         </header>
 
         {/* Customer details */}
@@ -1013,10 +859,11 @@ function App() {
               <button
                 key={id}
                 onClick={() => setPaymentMethod(id)}
-                className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition ${paymentMethod === id
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-slate-200 bg-white text-slate-600'
-                  }`}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition ${
+                  paymentMethod === id
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-600'
+                }`}
               >
                 <Icon size={19} />
                 {label}
