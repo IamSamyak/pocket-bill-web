@@ -3,12 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
-  Check,
   CheckCircle2,
-  Copy,
   MessageCircle,
   MessageSquare,
+  Phone,
   RefreshCw,
+  ArrowDownWideNarrow,
 } from 'lucide-react'
 
 import {
@@ -26,6 +26,12 @@ type CollectionsScreenProps = {
 }
 
 type Filter = 'all' | 'unpaid' | 'partial'
+
+type SortOption =
+  | 'newest'
+  | 'oldest'
+  | 'highest'
+  | 'lowest'
 
 const MS_PER_DAY = 86_400_000
 
@@ -87,6 +93,19 @@ function createReminderMessage(
   const shopAddress = shop?.address.trim()
 
   return [
+    'नमस्कार,',
+    '',
+    `आपल्या दिनांक ${formatDate(bill.billDate)} च्या पावती क्रमांक ${bill.receiptId} संदर्भात ही नम्र आठवण आहे.`,
+    `आपली बाकी रक्कम ${formatCurrency(bill.outstandingAmount)} आहे.`,
+    '',
+    'कृपया आपल्या सोयीनुसार बाकी रक्कम जमा करावी.',
+    '',
+    'धन्यवाद,',
+    shopName,
+    ...(shopAddress ? [shopAddress] : []),
+    '',
+    '------------------------------',
+    '',
     'Dear Sir/Madam,',
     '',
     `This is a friendly reminder regarding your bill ${bill.receiptId} dated ${formatDate(bill.billDate)}.`,
@@ -107,9 +126,8 @@ function LoadingSkeleton() {
       aria-busy="true"
       aria-label="Loading collections"
     >
-      <div className="h-11 w-64 animate-pulse rounded-xl bg-gray-200" />
-
-      <div className="h-32 animate-pulse rounded-2xl bg-orange-100" />
+      <div className="h-16 animate-pulse rounded-2xl bg-blue-100" />
+      <div className="h-32 animate-pulse rounded-2xl bg-blue-100" />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[0, 1, 2].map((i) => (
@@ -123,37 +141,25 @@ function LoadingSkeleton() {
   )
 }
 
-function CollectionsScreen({
+export default function CollectionsScreen({
   onBack,
 }: CollectionsScreenProps) {
   const [bills, setBills] = useState<CollectionBill[]>([])
   const [shop, setShop] = useState<ShopDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
   const [filter, setFilter] = useState<Filter>('all')
-
-  const [copiedReceiptId, setCopiedReceiptId] =
-    useState<string | null>(null)
-
-  const [copyFailedReceiptId, setCopyFailedReceiptId] =
-    useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<SortOption>('newest')
 
   const isMounted = useRef(true)
 
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
-
-  // Component lifecycle and timer cleanup.
+  // Component lifecycle.
   useEffect(() => {
     isMounted.current = true
 
     return () => {
       isMounted.current = false
-
-      if (copyTimer.current) {
-        clearTimeout(copyTimer.current)
-      }
     }
   }, [])
 
@@ -189,7 +195,7 @@ function CollectionsScreen({
     }
   }, [])
 
-  // Refresh from the header button.
+  // Refresh collections.
   async function handleReload() {
     setLoading(true)
     setError(null)
@@ -211,41 +217,6 @@ function CollectionsScreen({
       if (isMounted.current) {
         setLoading(false)
       }
-    }
-  }
-
-  function resetCopyStateSoon() {
-    if (copyTimer.current) {
-      clearTimeout(copyTimer.current)
-    }
-
-    copyTimer.current = setTimeout(() => {
-      setCopiedReceiptId(null)
-      setCopyFailedReceiptId(null)
-    }, 2000)
-  }
-
-  async function handleCopyMessage(bill: CollectionBill) {
-    try {
-      await navigator.clipboard.writeText(
-        createReminderMessage(bill, shop),
-      )
-
-      if (!isMounted.current) return
-
-      setCopiedReceiptId(bill.receiptId)
-      setCopyFailedReceiptId(null)
-    } catch (err) {
-      console.error('Failed to copy reminder:', err)
-
-      if (!isMounted.current) return
-
-      setCopyFailedReceiptId(bill.receiptId)
-      setCopiedReceiptId(null)
-    }
-
-    if (isMounted.current) {
-      resetCopyStateSoon()
     }
   }
 
@@ -273,18 +244,33 @@ function CollectionsScreen({
     }
   }, [bills])
 
-  // Bill filtering.
+  // Filter and sort bills.
   const visibleBills = useMemo(() => {
+    let result = bills
+
     if (filter === 'unpaid') {
-      return bills.filter((bill) => bill.amountPaid <= 0)
+      result = result.filter((bill) => bill.amountPaid <= 0)
+    } else if (filter === 'partial') {
+      result = result.filter((bill) => bill.amountPaid > 0)
     }
 
-    if (filter === 'partial') {
-      return bills.filter((bill) => bill.amountPaid > 0)
-    }
+    return [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'oldest':
+          return a.billDate.getTime() - b.billDate.getTime()
 
-    return bills
-  }, [bills, filter])
+        case 'highest':
+          return b.outstandingAmount - a.outstandingAmount
+
+        case 'lowest':
+          return a.outstandingAmount - b.outstandingAmount
+
+        case 'newest':
+        default:
+          return b.billDate.getTime() - a.billDate.getTime()
+      }
+    })
+  }, [bills, filter, sortBy])
 
   const filters: {
     key: Filter
@@ -296,6 +282,16 @@ function CollectionsScreen({
     { key: 'partial', label: 'Partial', count: partialCount },
   ]
 
+  const sortOptions: {
+    value: SortOption
+    label: string
+  }[] = [
+    { value: 'newest', label: 'Newest first' },
+    { value: 'oldest', label: 'Oldest / Due since' },
+    { value: 'highest', label: 'Highest amount' },
+    { value: 'lowest', label: 'Lowest amount' },
+  ]
+
   if (loading && bills.length === 0) {
     return <LoadingSkeleton />
   }
@@ -304,14 +300,14 @@ function CollectionsScreen({
     <div className="min-h-screen bg-slate-50 pb-10">
       <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 sm:space-y-6 sm:px-6 sm:py-7">
 
-        {/* Header - consistent with Dashboard */}
-        <header className="flex items-center justify-between gap-3">
+        {/* Blue header */}
+        <header className="flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 shadow-sm sm:p-4">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={onBack}
               aria-label="Back to billing"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 active:bg-slate-200"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-100 active:bg-blue-200"
             >
               <ArrowLeft size={19} />
             </button>
@@ -321,7 +317,7 @@ function CollectionsScreen({
                 Collections
               </h1>
 
-              <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+              <p className="mt-0.5 text-xs text-slate-600 sm:text-sm">
                 Outstanding payments and customer reminders
               </p>
             </div>
@@ -332,7 +328,7 @@ function CollectionsScreen({
             onClick={() => void handleReload()}
             disabled={loading}
             aria-label="Refresh collections"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-100 disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -365,11 +361,11 @@ function CollectionsScreen({
         {/* Outstanding summary */}
         <section
           aria-label="Outstanding summary"
-          className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-4 shadow-sm sm:p-6"
+          className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-indigo-50 to-white p-4 shadow-sm sm:p-6"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-orange-800">
+              <p className="text-sm font-semibold text-blue-800">
                 Total outstanding
               </p>
 
@@ -377,18 +373,18 @@ function CollectionsScreen({
                 {formatCurrency(totalOutstanding)}
               </p>
 
-              <p className="mt-2 text-xs text-slate-500 sm:text-sm">
+              <p className="mt-2 text-xs text-slate-600 sm:text-sm">
                 Pending amount across all outstanding bills
               </p>
             </div>
 
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-orange-700">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
               <MessageCircle size={23} />
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-orange-200/70 pt-4 text-xs font-semibold sm:text-sm">
-            <span className="rounded-full bg-white px-3 py-1.5 text-slate-700 ring-1 ring-orange-200">
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-blue-200/70 pt-4 text-xs font-semibold sm:text-sm">
+            <span className="rounded-full bg-white px-3 py-1.5 text-slate-700 ring-1 ring-blue-200">
               {bills.length} {bills.length === 1 ? 'bill' : 'bills'}
             </span>
 
@@ -402,19 +398,51 @@ function CollectionsScreen({
           </div>
         </section>
 
-        {/* Filters */}
+        {/* Filters and sorting */}
         {bills.length > 0 && (
-          <section>
-            <div className="mb-3">
-              <h2 className="text-sm font-bold text-slate-900">
-                Outstanding bills
-              </h2>
+          <section className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Outstanding bills
+                </h2>
 
-              <p className="mt-0.5 text-xs text-slate-500">
-                Select a status to filter the bills.
-              </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Filter and sort pending customer payments.
+                </p>
+              </div>
+
+              {/* Sort dropdown */}
+              <div className="w-full sm:w-60">
+                <label
+                  htmlFor="collections-sort"
+                  className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-600"
+                >
+                  <ArrowDownWideNarrow size={15} />
+                  Sort bills by
+                </label>
+
+                <select
+                  id="collections-sort"
+                  value={sortBy}
+                  onChange={(event) =>
+                    setSortBy(event.target.value as SortOption)
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  {sortOptions.map((option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
+            {/* Filter tabs */}
             <div
               role="tablist"
               aria-label="Filter bills"
@@ -432,8 +460,8 @@ function CollectionsScreen({
                     onClick={() => setFilter(key)}
                     className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold transition ${
                       active
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                        ? 'bg-blue-700 text-white shadow-sm'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-blue-50'
                     }`}
                   >
                     {label}
@@ -457,8 +485,8 @@ function CollectionsScreen({
         {/* Empty state */}
         {!error && !loading && bills.length === 0 && (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
-              <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+              <CheckCircle2 className="h-9 w-9 text-blue-600" />
             </div>
 
             <h2 className="mt-4 text-lg font-semibold text-slate-900">
@@ -507,22 +535,16 @@ function CollectionsScreen({
             const customerName =
               bill.customerName?.trim() || 'Unknown customer'
 
-            const isCopied =
-              copiedReceiptId === bill.receiptId
-
-            const isCopyFailed =
-              copyFailedReceiptId === bill.receiptId
-
             return (
               <article
                 key={bill.receiptId}
-                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:shadow-md sm:p-4"
+                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4"
               >
                 {/* Customer information */}
                 <div className="flex items-start gap-3">
                   <div
                     aria-hidden="true"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-100 text-base font-bold text-orange-700"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-base font-bold text-blue-700"
                   >
                     {customerName.charAt(0).toUpperCase()}
                   </div>
@@ -593,43 +615,36 @@ function CollectionsScreen({
                   )}
                 </dl>
 
-                {/* Reminder actions */}
+                {/* Call, SMS and WhatsApp actions */}
                 <div className="mt-auto border-t border-slate-100 pt-4">
-                  <div className="grid grid-cols-[3rem_1fr_1fr] gap-2">
-                    {/* Copy */}
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyMessage(bill)}
-                      aria-label={`Copy reminder for ${customerName}`}
-                      className={`flex h-12 items-center justify-center rounded-xl border transition active:scale-[0.97] ${
-                        isCopyFailed
-                          ? 'border-red-200 bg-red-50 text-red-600'
-                          : isCopied
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Call */}
+                    <a
+                      href={hasPhoneNumber ? `tel:+${phoneNumber}` : undefined}
+                      aria-disabled={!hasPhoneNumber}
+                      tabIndex={hasPhoneNumber ? undefined : -1}
+                      className={`flex h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold transition active:scale-[0.97] ${
+                        hasPhoneNumber
+                          ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                          : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400'
                       }`}
                     >
-                      {isCopyFailed ? (
-                        <AlertCircle size={19} />
-                      ) : isCopied ? (
-                        <Check size={19} />
-                      ) : (
-                        <Copy size={19} />
-                      )}
-                    </button>
+                      <Phone size={17} />
+                      Call
+                    </a>
 
                     {/* SMS */}
                     <a
                       href={hasPhoneNumber ? smsLink : undefined}
                       aria-disabled={!hasPhoneNumber}
                       tabIndex={hasPhoneNumber ? undefined : -1}
-                      className={`flex h-12 items-center justify-center gap-2 rounded-xl border px-2 text-sm font-semibold transition active:scale-[0.97] ${
+                      className={`flex h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold transition active:scale-[0.97] ${
                         hasPhoneNumber
                           ? 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
                           : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400'
                       }`}
                     >
-                      <MessageSquare size={18} />
+                      <MessageSquare size={17} />
                       SMS
                     </a>
 
@@ -640,32 +655,20 @@ function CollectionsScreen({
                       rel="noopener noreferrer"
                       aria-disabled={!hasPhoneNumber}
                       tabIndex={hasPhoneNumber ? undefined : -1}
-                      className={`flex h-12 items-center justify-center gap-2 rounded-xl px-2 text-sm font-semibold transition active:scale-[0.97] ${
+                      className={`flex h-12 items-center justify-center gap-1 rounded-xl px-1.5 text-sm font-semibold transition active:scale-[0.97] ${
                         hasPhoneNumber
                           ? 'bg-green-600 text-white hover:bg-green-700'
                           : 'pointer-events-none bg-slate-200 text-slate-400'
                       }`}
                     >
-                      <MessageCircle size={18} />
+                      <MessageCircle size={17} />
                       WhatsApp
                     </a>
                   </div>
 
-                  <p
-                    className="sr-only"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    {isCopied
-                      ? 'Reminder copied'
-                      : isCopyFailed
-                        ? 'Copy failed'
-                        : ''}
-                  </p>
-
                   {!hasPhoneNumber && (
                     <p className="mt-2 text-center text-xs text-slate-500">
-                      Add a valid mobile number to use reminders.
+                      Add a valid mobile number to use these actions.
                     </p>
                   )}
                 </div>
@@ -688,5 +691,3 @@ function CollectionsScreen({
     </div>
   )
 }
-
-export default CollectionsScreen
